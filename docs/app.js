@@ -2,7 +2,9 @@
   const playlist = document.querySelector("#playlist");
   const scrubber = document.querySelector("#scrubber");
   const scrubberThumb = document.querySelector("#scrubberThumb");
+  const scrubberThumbGhost = document.querySelector("#scrubberThumbGhost");
   const scrubberProgress = document.querySelector("#scrubberProgress");
+  const scrubberProgressGhost = document.querySelector("#scrubberProgressGhost");
   const scrubberNumber = document.querySelector("#scrubberNumber");
   const scrubberName = document.querySelector("#scrubberName");
   const announcement = document.querySelector("#projectAnnouncement");
@@ -26,6 +28,8 @@
   let dragging = false;
   let resizeTimer;
   let scrollEndTimer;
+  let scrubberLoopTimer;
+  let scrubberLoopToken = 0;
   let nextForwardCycle = 2;
   const playbackTokens = new WeakMap();
   const wiredCards = new WeakSet();
@@ -146,17 +150,23 @@
   function updateActive(forceAnnouncement = false) {
     const nextActive = nearestCard();
     const nextProject = Number(nextActive.dataset.project || 0);
+    const previousCard = activeCard;
+    const previousProject = activeProject;
+    const previousIndex = previousCard ? allCards.indexOf(previousCard) : -1;
     const changed = nextActive !== activeCard;
     activeCard = nextActive;
     activeProject = nextProject;
+    const activeIndex = allCards.indexOf(activeCard);
+    const direction = previousIndex >= 0 ? Math.sign(activeIndex - previousIndex) : 0;
 
     allCards.forEach((card, index) => {
-      const activeIndex = allCards.indexOf(activeCard);
       card.classList.toggle("is-active", card === activeCard);
       card.classList.toggle("is-near", Math.abs(index - activeIndex) === 1);
     });
 
-    if (!dragging) setScrubberPosition(50);
+    if (!dragging && (!previousCard || previousProject !== nextProject)) {
+      moveScrubberToProject(nextProject, previousProject, direction);
+    }
     scrubberNumber.textContent = String(activeProject + 1).padStart(2, "0");
     scrubberName.textContent = projectNames[activeProject];
     scrubber.setAttribute("aria-valuenow", String(activeProject + 1));
@@ -252,11 +262,70 @@
     });
   }
 
+  function projectPercent(projectIndex) {
+    return projectCount > 1 ? (projectIndex / (projectCount - 1)) * 100 : 0;
+  }
+
+  function positionScrubberPair(thumb, progress, percent, clampToRail = true) {
+    if (!thumb || !progress) return;
+    const thumbPosition = clampToRail ? Math.min(100, Math.max(0, percent)) : percent;
+    const rawProgressPosition = thumbPosition - 8;
+    const progressPosition = clampToRail
+      ? Math.min(84, Math.max(0, rawProgressPosition))
+      : rawProgressPosition;
+    thumb.style.top = `${thumbPosition}%`;
+    progress.style.top = `${progressPosition}%`;
+    progress.style.height = "16%";
+  }
+
   function setScrubberPosition(percent) {
-    const position = Math.min(100, Math.max(0, percent));
-    scrubberThumb.style.top = `${position}%`;
-    scrubberProgress.style.top = `${Math.min(84, Math.max(0, position - 8))}%`;
-    scrubberProgress.style.height = "16%";
+    clearTimeout(scrubberLoopTimer);
+    scrubberLoopToken += 1;
+    scrubber.classList.remove("is-looping");
+    positionScrubberPair(scrubberThumb, scrubberProgress, percent);
+  }
+
+  function animateScrubberLoop(nextProject, previousProject, direction) {
+    const movingDown = previousProject === projectCount - 1 && nextProject === 0 && direction > 0;
+    const nextPosition = projectPercent(nextProject);
+    const previousPosition = projectPercent(previousProject);
+    const mainExit = movingDown ? 112 : -12;
+    const ghostEntry = movingDown ? -12 : 112;
+    const token = ++scrubberLoopToken;
+
+    clearTimeout(scrubberLoopTimer);
+    scrubber.classList.add("is-jumping", "is-looping");
+    positionScrubberPair(scrubberThumb, scrubberProgress, previousPosition);
+    positionScrubberPair(scrubberThumbGhost, scrubberProgressGhost, ghostEntry, false);
+    void scrubber.offsetHeight;
+    scrubber.classList.remove("is-jumping");
+
+    requestAnimationFrame(() => {
+      if (token !== scrubberLoopToken) return;
+      positionScrubberPair(scrubberThumb, scrubberProgress, mainExit, false);
+      positionScrubberPair(scrubberThumbGhost, scrubberProgressGhost, nextPosition);
+    });
+
+    scrubberLoopTimer = setTimeout(() => {
+      if (token !== scrubberLoopToken) return;
+      scrubber.classList.add("is-jumping");
+      positionScrubberPair(scrubberThumb, scrubberProgress, nextPosition);
+      scrubber.classList.remove("is-looping");
+      positionScrubberPair(scrubberThumbGhost, scrubberProgressGhost, ghostEntry, false);
+      void scrubber.offsetHeight;
+      scrubber.classList.remove("is-jumping");
+    }, 400);
+  }
+
+  function moveScrubberToProject(nextProject, previousProject, direction) {
+    if (reducedMotion.matches) {
+      setScrubberPosition(projectPercent(nextProject));
+      return;
+    }
+    const wrapsDown = previousProject === projectCount - 1 && nextProject === 0 && direction > 0;
+    const wrapsUp = previousProject === 0 && nextProject === projectCount - 1 && direction < 0;
+    if (wrapsDown || wrapsUp) animateScrubberLoop(nextProject, previousProject, direction);
+    else setScrubberPosition(projectPercent(nextProject));
   }
 
   function pointerPosition(event) {
@@ -317,6 +386,7 @@
     dragging = false;
     scrubber.classList.remove("is-dragging");
     if (scrubber.hasPointerCapture(event.pointerId)) scrubber.releasePointerCapture(event.pointerId);
+    setScrubberPosition(projectPercent(activeProject));
     updateActive(true);
     scheduleScrollEnd();
   }

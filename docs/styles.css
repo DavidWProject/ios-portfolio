@@ -539,16 +539,16 @@ button {
 }
 
 .scrubber-progress {
-  top: 42%;
+  top: 0;
   height: 16%;
   background: var(--accent);
   box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.65);
-  transition: top 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: top 360ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease;
 }
 
 .scrubber-thumb {
   position: absolute;
-  top: 50%;
+  top: 0;
   left: 50%;
   width: 15px;
   height: 15px;
@@ -559,9 +559,22 @@ button {
     0 0 0 1px rgba(255, 255, 255, 0.62),
     0 0 25px rgba(var(--accent-rgb), 0.82);
   transform: translate(-50%, -50%);
-  transition: top 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: top 360ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease;
 }
 
+.scrubber-progress-ghost,
+.scrubber-thumb-ghost {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scrubber.is-looping .scrubber-progress-ghost,
+.scrubber.is-looping .scrubber-thumb-ghost {
+  opacity: 1;
+}
+
+.scrubber.is-jumping .scrubber-progress,
+.scrubber.is-jumping .scrubber-thumb,
 .scrubber.is-dragging .scrubber-progress,
 .scrubber.is-dragging .scrubber-thumb {
   transition: none;

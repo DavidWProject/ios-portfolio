@@ -12,6 +12,7 @@
 
 - Updated the portfolio video controller to follow real playback events instead of assuming `video.play()` succeeded.
 - Changed all five trailers from metadata-only loading to automatic preloading while keeping inactive videos paused.
+- Versioned the playback script URL so existing visitors receive the fix immediately instead of a cached controller.
 
 ## 2026-07-20
 

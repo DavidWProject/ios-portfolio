@@ -25,6 +25,7 @@
   let wrapping = false;
   let dragging = false;
   let resizeTimer;
+  const playbackTokens = new WeakMap();
 
   function makeClone(card, cycle) {
     const clone = card.cloneNode(true);
@@ -85,27 +86,48 @@
     if (accentRgb) document.documentElement.style.setProperty("--accent-rgb", accentRgb);
   }
 
-  function pauseVideo(video, button) {
-    video.pause();
-    if (button) {
-      button.textContent = "Play";
-      button.setAttribute("aria-label", button.getAttribute("aria-label").replace("Pause", "Play"));
-    }
+  function setVideoButton(button, state) {
+    if (!button) return;
+    const currentLabel = button.getAttribute("aria-label") || "Trailer";
+    const trailerName = currentLabel.replace(/^(Play|Pause|Loading) /, "");
+    button.textContent = state === "Loading" ? "Loading…" : state;
+    button.setAttribute("aria-label", `${state} ${trailerName}`);
   }
 
-  function playVideo(video, button) {
-    if (reducedMotion.matches) {
+  function pauseVideo(video, button) {
+    playbackTokens.set(video, (playbackTokens.get(video) || 0) + 1);
+    video.pause();
+    setVideoButton(button, "Play");
+  }
+
+  function playVideo(video, button, manual = false) {
+    if (reducedMotion.matches && !manual) {
       pauseVideo(video, button);
       return;
     }
+
+    const token = (playbackTokens.get(video) || 0) + 1;
+    playbackTokens.set(video, token);
     video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.preload = "auto";
     video.playbackRate = 1.15;
+    setVideoButton(button, video.readyState >= 2 ? "Pause" : "Loading");
+
     const promise = video.play();
-    if (promise) promise.catch(() => pauseVideo(video, button));
-    if (button) {
-      button.textContent = "Pause";
-      button.setAttribute("aria-label", button.getAttribute("aria-label").replace("Play", "Pause"));
+    if (!promise) {
+      setVideoButton(button, "Pause");
+      return;
     }
+
+    promise
+      .then(() => {
+        if (playbackTokens.get(video) === token && !video.paused) setVideoButton(button, "Pause");
+      })
+      .catch(() => {
+        if (playbackTokens.get(video) === token) setVideoButton(button, "Play");
+      });
   }
 
   function syncVideos(card) {
@@ -178,6 +200,9 @@
       frameRequested = false;
       maybeWrap();
       updateActive();
+      const activeVideo = activeCard?.querySelector("video");
+      const activeButton = activeCard?.querySelector(".video-toggle");
+      if (activeVideo?.paused && activeVideo.readyState >= 2) playVideo(activeVideo, activeButton);
     });
   }
 
@@ -271,13 +296,23 @@
     const video = card.querySelector("video");
     const button = card.querySelector(".video-toggle");
     if (!video || !button) return;
+    video.preload = "auto";
     button.addEventListener("click", () => {
-      if (video.paused) playVideo(video, button);
+      if (video.paused) playVideo(video, button, true);
       else pauseVideo(video, button);
     });
     video.addEventListener("click", () => {
-      if (video.paused) playVideo(video, button);
+      if (video.paused) playVideo(video, button, true);
       else pauseVideo(video, button);
+    });
+    video.addEventListener("canplay", () => {
+      if (card === activeCard && video.paused) playVideo(video, button);
+    });
+    video.addEventListener("playing", () => {
+      if (card === activeCard) setVideoButton(button, "Pause");
+    });
+    video.addEventListener("waiting", () => {
+      if (card === activeCard) setVideoButton(button, "Loading");
     });
   });
 

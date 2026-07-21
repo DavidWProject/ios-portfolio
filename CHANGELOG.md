@@ -4,12 +4,17 @@
 
 ### Fixed
 
+- Moved infinite-loop recentering to the end of each scroll gesture so it no longer interrupts smooth movement after the third or fourth project.
+- Kept the left rail centered as a continuous current-project indicator instead of snapping from the bottom back to the top at every loop.
+- Carried the active trailer frame across the hidden recenter so the project card remains visually unchanged.
 - Preloaded Simulator trailers so the next project begins without waiting for its first click.
 - Retried active trailer playback when media becomes ready or the user continues scrolling.
 - Added an honest loading state and kept manual playback available when reduced-motion mode is enabled.
 
 ### Code change summary
 
+- Reworked the scroll controller to debounce gesture completion, temporarily disable snap during the internal recenter, and restore the matching trailer position.
+- Changed the infinite scrubber from finite-list progress to a centered loop indicator while preserving drag-to-project behavior.
 - Updated the portfolio video controller to follow real playback events instead of assuming `video.play()` succeeded.
 - Changed all five trailers from metadata-only loading to automatic preloading while keeping inactive videos paused.
 - Versioned the playback script URL so existing visitors receive the fix immediately instead of a cached controller.

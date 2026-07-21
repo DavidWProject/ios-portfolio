@@ -190,7 +190,7 @@ button {
   padding-inline: clamp(62px, 8vw, 132px);
   place-items: center;
   scroll-snap-align: center;
-  scroll-snap-stop: always;
+  scroll-snap-stop: normal;
   perspective: 1200px;
 }
 

@@ -26,7 +26,9 @@
   let dragging = false;
   let resizeTimer;
   let scrollEndTimer;
+  let nextForwardCycle = 2;
   const playbackTokens = new WeakMap();
+  const wiredCards = new WeakSet();
 
   function makeClone(card, cycle) {
     const clone = card.cloneNode(true);
@@ -188,15 +190,8 @@
     if (!cycleHeight || wrapping || dragging) return false;
     const middleTop = cardTarget(originals[0]);
     const top = playlist.scrollTop;
-    let offset = 0;
 
-    if (top < middleTop - cycleHeight * 0.5) {
-      offset = cycleHeight;
-    } else if (top > middleTop + cycleHeight * 1.5) {
-      offset = -cycleHeight;
-    }
-
-    if (!offset) return false;
+    if (top >= middleTop - cycleHeight * 0.5) return false;
 
     const sourceCard = nearestCard();
     const destinationCard = originals[Number(sourceCard.dataset.project || 0)];
@@ -204,7 +199,7 @@
 
     wrapping = true;
     playlist.classList.add("is-recentering");
-    playlist.scrollTop = top + offset;
+    playlist.scrollTop = top + cycleHeight;
     updateActive();
 
     requestAnimationFrame(() => {
@@ -214,6 +209,22 @@
       });
     });
     return true;
+  }
+
+  function appendForwardCycle() {
+    const cycleCards = originals.map((card) => makeClone(card, `after-${nextForwardCycle}`));
+    const fragment = document.createDocumentFragment();
+    nextForwardCycle += 1;
+    cycleCards.forEach((card) => fragment.append(card));
+    playlist.append(fragment);
+    allCards = Array.from(playlist.querySelectorAll(":scope > .project-card"));
+    cycleCards.forEach(wireCard);
+  }
+
+  function ensureForwardBuffer() {
+    if (!cycleHeight) return;
+    const remaining = playlist.scrollHeight - playlist.clientHeight - playlist.scrollTop;
+    if (remaining < cycleHeight * 1.5) appendForwardCycle();
   }
 
   function finishScroll() {
@@ -232,6 +243,7 @@
     frameRequested = true;
     requestAnimationFrame(() => {
       frameRequested = false;
+      ensureForwardBuffer();
       updateActive();
       const activeVideo = activeCard?.querySelector("video");
       const activeButton = activeCard?.querySelector(".video-toggle");
@@ -276,7 +288,11 @@
   }
 
   function moveOne(direction) {
-    const currentIndex = allCards.indexOf(nearestCard());
+    let currentIndex = allCards.indexOf(nearestCard());
+    if (direction > 0 && currentIndex >= allCards.length - 2) {
+      appendForwardCycle();
+      currentIndex = allCards.indexOf(nearestCard());
+    }
     const nextIndex = Math.min(allCards.length - 1, Math.max(0, currentIndex + direction));
     scrollToCard(allCards[nextIndex]);
   }
@@ -343,7 +359,9 @@
     }
   });
 
-  allCards.forEach((card) => {
+  function wireCard(card) {
+    if (wiredCards.has(card)) return;
+    wiredCards.add(card);
     const video = card.querySelector("video");
     const button = card.querySelector(".video-toggle");
     if (!video || !button) return;
@@ -365,7 +383,9 @@
     video.addEventListener("waiting", () => {
       if (card === activeCard) setVideoButton(button, "Loading");
     });
-  });
+  }
+
+  allCards.forEach(wireCard);
 
   playlist.addEventListener("scroll", onScroll, { passive: true });
   playlist.addEventListener("scrollend", finishScroll);

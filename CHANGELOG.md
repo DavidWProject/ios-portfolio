@@ -5,7 +5,8 @@
 ### Fixed
 
 - Removed the downward recenter entirely; the playlist now extends itself ahead of the viewer so scrolling never reverses or repeats a project.
-- Kept the left rail centered as a continuous current-project indicator instead of snapping from the bottom back to the top at every loop.
+- Restored left-rail movement so the thumb now tracks projects from 01 through 05 instead of staying fixed in the center.
+- Added a paired wrap animation so the thumb exits one end and re-enters the other when the playlist loops between 05 and 01.
 - Kept the rare upward safety recenter out of active scroll motion and carried its trailer frame across unchanged.
 - Allowed repeated wheel and trackpad input to continue through snap points without trapping the next gesture.
 - Preloaded Simulator trailers so the next project begins without waiting for its first click.
@@ -17,7 +18,7 @@
 - Added a forward cycle buffer that appends fully wired project cards before the viewer reaches the end of the playlist.
 - Limited internal recentering to upward navigation, after the gesture finishes.
 - Changed project snap stops from forced to normal while preserving centered project settling.
-- Changed the infinite scrubber from finite-list progress to a centered loop indicator while preserving drag-to-project behavior.
+- Rebuilt the scrubber controller with primary and ghost indicators for seamless forward and reverse wrapping while preserving drag-to-project behavior.
 - Updated the portfolio video controller to follow real playback events instead of assuming `video.play()` succeeded.
 - Changed all five trailers from metadata-only loading to automatic preloading while keeping inactive videos paused.
 - Versioned the playback script URL so existing visitors receive the fix immediately instead of a cached controller.

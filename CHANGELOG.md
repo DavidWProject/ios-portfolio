@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-21
+
+### Fixed
+
+- Preloaded Simulator trailers so the next project begins without waiting for its first click.
+- Retried active trailer playback when media becomes ready or the user continues scrolling.
+- Added an honest loading state and kept manual playback available when reduced-motion mode is enabled.
+
+### Code change summary
+
+- Updated the portfolio video controller to follow real playback events instead of assuming `video.play()` succeeded.
+- Changed all five trailers from metadata-only loading to automatic preloading while keeping inactive videos paused.
+
 ## 2026-07-20
 
 ### Added

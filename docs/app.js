@@ -25,6 +25,7 @@
   let wrapping = false;
   let dragging = false;
   let resizeTimer;
+  let scrollEndTimer;
   const playbackTokens = new WeakMap();
 
   function makeClone(card, cycle) {
@@ -153,9 +154,7 @@
       card.classList.toggle("is-near", Math.abs(index - activeIndex) === 1);
     });
 
-    const progress = projectCount > 1 ? (activeProject / (projectCount - 1)) * 100 : 0;
-    scrubberThumb.style.top = `${progress}%`;
-    scrubberProgress.style.height = `${progress}%`;
+    if (!dragging) setScrubberPosition(50);
     scrubberNumber.textContent = String(activeProject + 1).padStart(2, "0");
     scrubberName.textContent = projectNames[activeProject];
     scrubber.setAttribute("aria-valuenow", String(activeProject + 1));
@@ -173,24 +172,59 @@
     }
   }
 
+  function carryVideoFrame(sourceCard, destinationCard) {
+    const sourceVideo = sourceCard?.querySelector("video");
+    const destinationVideo = destinationCard?.querySelector("video");
+    if (!sourceVideo || !destinationVideo || !Number.isFinite(sourceVideo.currentTime)) return;
+
+    try {
+      destinationVideo.currentTime = sourceVideo.currentTime;
+    } catch {
+      // The destination trailer will begin normally if its metadata is not ready yet.
+    }
+  }
+
   function maybeWrap() {
-    if (!cycleHeight || wrapping || dragging) return;
+    if (!cycleHeight || wrapping || dragging) return false;
     const middleTop = cardTarget(originals[0]);
     const top = playlist.scrollTop;
+    let offset = 0;
 
     if (top < middleTop - cycleHeight * 0.5) {
-      wrapping = true;
-      playlist.scrollTop = top + cycleHeight;
-      requestAnimationFrame(() => {
-        wrapping = false;
-      });
+      offset = cycleHeight;
     } else if (top > middleTop + cycleHeight * 1.5) {
-      wrapping = true;
-      playlist.scrollTop = top - cycleHeight;
+      offset = -cycleHeight;
+    }
+
+    if (!offset) return false;
+
+    const sourceCard = nearestCard();
+    const destinationCard = originals[Number(sourceCard.dataset.project || 0)];
+    carryVideoFrame(sourceCard, destinationCard);
+
+    wrapping = true;
+    playlist.classList.add("is-recentering");
+    playlist.scrollTop = top + offset;
+    updateActive();
+
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        playlist.classList.remove("is-recentering");
         wrapping = false;
       });
-    }
+    });
+    return true;
+  }
+
+  function finishScroll() {
+    clearTimeout(scrollEndTimer);
+    if (wrapping || dragging) return;
+    if (!maybeWrap()) updateActive();
+  }
+
+  function scheduleScrollEnd() {
+    clearTimeout(scrollEndTimer);
+    scrollEndTimer = setTimeout(finishScroll, 220);
   }
 
   function onScroll() {
@@ -198,12 +232,28 @@
     frameRequested = true;
     requestAnimationFrame(() => {
       frameRequested = false;
-      maybeWrap();
       updateActive();
       const activeVideo = activeCard?.querySelector("video");
       const activeButton = activeCard?.querySelector(".video-toggle");
       if (activeVideo?.paused && activeVideo.readyState >= 2) playVideo(activeVideo, activeButton);
+      scheduleScrollEnd();
     });
+  }
+
+  function setScrubberPosition(percent) {
+    const position = Math.min(100, Math.max(0, percent));
+    scrubberThumb.style.top = `${position}%`;
+    scrubberProgress.style.top = `${Math.min(84, Math.max(0, position - 8))}%`;
+    scrubberProgress.style.height = "16%";
+  }
+
+  function pointerPosition(event) {
+    const rect = scrubber.getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+    return {
+      percent: fraction * 100,
+      project: Math.round(fraction * (projectCount - 1)),
+    };
   }
 
   function scrollToCard(card, behavior = "smooth") {
@@ -231,27 +281,28 @@
     scrollToCard(allCards[nextIndex]);
   }
 
-  function projectFromPointer(event) {
-    const rect = scrubber.getBoundingClientRect();
-    const fraction = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-    return Math.round(fraction * (projectCount - 1));
-  }
-
   scrubber.addEventListener("pointerdown", (event) => {
     dragging = true;
+    scrubber.classList.add("is-dragging");
     scrubber.setPointerCapture(event.pointerId);
-    goToProject(projectFromPointer(event), "auto");
+    const position = pointerPosition(event);
+    setScrubberPosition(position.percent);
+    goToProject(position.project, "auto");
   });
 
   scrubber.addEventListener("pointermove", (event) => {
     if (!dragging) return;
-    goToProject(projectFromPointer(event), "auto");
+    const position = pointerPosition(event);
+    setScrubberPosition(position.percent);
+    goToProject(position.project, "auto");
   });
 
   function endDrag(event) {
     dragging = false;
+    scrubber.classList.remove("is-dragging");
     if (scrubber.hasPointerCapture(event.pointerId)) scrubber.releasePointerCapture(event.pointerId);
     updateActive(true);
+    scheduleScrollEnd();
   }
 
   scrubber.addEventListener("pointerup", endDrag);
@@ -317,6 +368,7 @@
   });
 
   playlist.addEventListener("scroll", onScroll, { passive: true });
+  playlist.addEventListener("scrollend", finishScroll);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       document.querySelectorAll("video").forEach((video) => video.pause());
